@@ -1,0 +1,62 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+    
+    function getPairData(pairId) {
+      return get(/databases/$(database)/documents/pairs/$(pairId)).data;
+    }
+    
+    function isInPair(pairId) {
+      return isSignedIn() && request.auth.uid in getPairData(pairId).users;
+    }
+
+    // User profiles
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId);
+    }
+
+    // Invite codes (temporary)
+    match /inviteCodes/{code} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow delete: if isSignedIn(); // Only creator should delete, simplified for now
+    }
+
+    // Pairs
+    match /pairs/{pairId} {
+      allow read: if isInPair(pairId);
+      allow create: if isSignedIn();
+      allow update: if isInPair(pairId);
+      
+      // Updates subcollection
+      match /updates/{updateId} {
+        allow read: if isInPair(pairId);
+        allow create: if isInPair(pairId);
+        allow update: if isInPair(pairId);
+        allow delete: if isInPair(pairId);
+      }
+      
+      // Timeline subcollection
+      match /timeline/{itemId} {
+        allow read: if isInPair(pairId);
+        allow create: if isInPair(pairId);
+        allow update: if isInPair(pairId);
+      }
+      
+      // Location subcollection
+      match /location/{userId} {
+        allow read: if isInPair(pairId);
+        allow write: if isOwner(userId) && isInPair(pairId);
+      }
+    }
+  }
+}
